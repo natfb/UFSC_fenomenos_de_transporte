@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador Termodinâmico Avançado (NIST/Laine)</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        :root { --primary: #2c3e50; --accent: #3498db; --bg: #f4f7f6; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); color: var(--primary); display: flex; flex-direction: column; align-items: center; margin: 0; padding: 20px; }
+        
+        h1 { margin-bottom: 10px; }
+        
+        .main-container { display: flex; flex-wrap: wrap; gap: 20px; width: 100%; max-width: 1200px; }
+        
+        /* Painel de Controle */
+        .controls { flex: 1; min-width: 300px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .control-group { margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.9rem; }
+        select, input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        
+        /* Toggle Switch */
+        .toggle-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; background: #e8f4fc; padding: 10px; border-radius: 5px; }
+        input[type="checkbox"] { width: auto; transform: scale(1.5); margin: 0; }
+
+        button { width: 100%; padding: 12px; background-color: var(--accent); color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 1rem; transition: 0.2s; }
+        button:hover { background-color: #2980b9; }
+
+        /* Área Visual */
+        .visuals { flex: 2; display: flex; flex-direction: column; gap: 20px; min-width: 300px; }
+        .graph-card { background: white; padding: 10px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); height: 450px; }
+        
+        /* Resultados e Pistão */
+        .bottom-row { display: flex; gap: 20px; height: 250px; }
+        .results { flex: 2; background: #2ecc71; color: white; padding: 20px; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; }
+        .results h3 { margin-top: 0; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; }
+        .res-item { font-size: 1.1rem; margin: 5px 0; display: flex; justify-content: space-between; }
+
+        /* Animação do Pistão */
+        .piston-container { flex: 1; background: white; border-radius: 10px; position: relative; padding: 20px; display: flex; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .cylinder { width: 120px; height: 200px; border: 4px solid #333; border-top: none; position: relative; background: rgba(255,255,255,0.5); overflow: hidden; }
+        .gas-visual { width: 100%; height: 100px; position: absolute; bottom: 0; background-color: rgba(52, 152, 219, 0.5); transition: height 1s, background-color 1s; }
+        .piston-head { width: 120px; height: 20px; background: #555; position: absolute; bottom: 100px; transition: bottom 1s; border-bottom: 2px solid #222; }
+        .rod { width: 20px; height: 200px; background: #999; margin: 0 auto; position: absolute; bottom: 20px; left: 50px; }
+        
+        .piston-label { position: absolute; top: 10px; width: 100%; text-align: center; font-weight: bold; color: #777; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Simulador Termodinâmico (Método Laine/NIST)</h1>
+
+    <div class="main-container">
+        <div class="controls">
+            <div class="control-group">
+                <label>Substância (Gás Real):</label>
+                <select id="gasSelect">
+                    <option value="ar">Ar Atmosférico</option>
+                    <option value="n2">Nitrogênio (N2)</option>
+                    <option value="o2">Oxigênio (O2)</option>
+                    <option value="co2">Dióxido de Carbono (CO2)</option>
+                    <option value="h2o">Vapor de Água (H2O)</option>
+                </select>
+                
+                <div class="toggle-row">
+                    <input type="checkbox" id="checkLaine" checked>
+                    <label for="checkLaine" style="margin:0; cursor:pointer; font-weight: normal;">
+                        <strong>Modo Preciso (NIST)</strong><br>
+                        <span style="font-size:0.8em">Considera $C_p(T)$ variável (Tabela)</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Processo:</label>
+                <select id="processo">
+                    <option value="isobarico">Isobárico (P constante)</option>
+                    <option value="isocorico">Isocórico (V constante)</option>
+                    <option value="isotermico">Isotérmico (T constante)</option>
+                    <option value="adiabatico">Adiabático (Isentrópico)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Estado Inicial ($T_1, P_1$):</label>
+                <input type="number" id="t1" value="300" placeholder="Temp (K)">
+                <input type="number" id="p1" value="100000" placeholder="Pressão (Pa)" style="margin-top:5px;">
+                
+                <label style="margin-top:10px;">Geometria ($V_1 \to V_2$):</label>
+                <input type="number" id="v1" value="0.05" step="0.01" placeholder="V1 (m³)">
+                <input type="number" id="v2" value="0.10" step="0.01" placeholder="V2 (m³)" style="margin-top:5px;">
+            </div>
+
+            <button onclick="calcular()">Simular Processo</button>
+        </div>
+
+        <div class="visuals">
+            <div class="graph-card">
+                <div id="plotDiv" style="width:100%; height:100%;"></div>
+            </div>
+
+            <div class="bottom-row">
+                <div class="results">
+                    <h3>Resultados (1ª Lei)</h3>
+                    <div class="res-item"><span>Trabalho (W):</span> <span id="resW">---</span></div>
+                    <div class="res-item"><span>Calor (Q):</span> <span id="resQ">---</span></div>
+                    <div class="res-item"><span>Energia ($\Delta U$):</span> <span id="resU">---</span></div>
+                    <div class="res-item" style="margin-top:10px; font-size:0.9em; color:#e0f7fa">
+                        <span id="resT2">T_final: ---</span>
+                    </div>
+                </div>
+
+                <div class="piston-container">
+                    <div class="piston-label">Visualização</div>
+                    <div class="cylinder">
+                        <div id="pistGas" class="gas-visual"></div>
+                        <div id="pistHead" class="piston-head">
+                            <div class="rod"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DADOS NIST (Coeficientes Shomate) ---
+        // Fonte: NIST Webbook. Válido para aprox 300K-1000K
+        // Formato: A, B, C, D, E, F, G, H
+        const gases = {
+            ar: { 
+                nome: "Ar", 
+                coeffs: [28.089, -0.0086, 0.000057, -2.7e-8, 0, -9.85, 22.67, 0], // Simplificado
+                massaMolar: 28.97 
+            },
+            n2: {
+                nome: "Nitrogênio",
+                coeffs: [26.092, 8.2188, -1.976, 0.159, 0.044, -7.96, 220.9, 0],
+                massaMolar: 28.01
+            },
+            co2: {
+                nome: "CO2",
+                coeffs: [24.99, 55.18, -33.69, 7.94, -0.136, -393.5, 228.2, 0],
+                massaMolar: 44.01
+            },
+            h2o: {
+                nome: "Vapor D'água",
+                coeffs: [30.09, 6.83, 6.79, -2.53, 0.082, -243.2, 189.3, 0],
+                massaMolar: 18.01
+            },
+            o2: {
+                nome: "Oxigênio",
+                coeffs: [29.65, 6.137, -1.18, 0.095, -0.219, -9.86, 205.6, 0],
+                massaMolar: 32.00
+            }
+        };
+
+        const R = 8.314; // J/mol.K
+
+        // --- MOTOR DE FÍSICA (LAINE / NIST) ---
+
+        // Calcula propriedades (h, s, cp, u) dado T e Coeficientes
+        // baseada em srnogueira/laine/scripts/functions.js
+        function calcShomate(T, coeffs) {
+            let t = T / 1000.0;
+            let [A, B, C, D, E, F, G, H] = coeffs;
+
+            // Cp (J/mol.K)
+            let cp = A + B*t + C*Math.pow(t,2) + D*Math.pow(t,3) + E/Math.pow(t,2);
+
+            // Entalpia (H) (kJ/mol -> converter para J/mol)
+            let h_kj = A*t + (B*Math.pow(t,2))/2 + (C*Math.pow(t,3))/3 + (D*Math.pow(t,4))/4 - E/t + F;
+            let h = h_kj * 1000;
+
+            // Entropia (S) (J/mol.K)
+            let s = A*Math.log(t) + B*t + (C*Math.pow(t,2))/2 + (D*Math.pow(t,3))/3 - E/(2*Math.pow(t,2)) + G;
+
+            // Energia Interna (U) = H - RT
+            let u = h - (R * T);
+
+            return { cp, h, s, u };
+        }
+
+        // Entropia total considerando pressão: S(T,P) = s0(T) - R*ln(P/P0)
+        function entropiaTotal(T, P, coeffs) {
+            let props = calcShomate(T, coeffs);
+            let P_ref = 100000; // 1 bar
+            return props.s - R * Math.log(P / P_ref);
+        }
+
+        // Resolve Temperatura para um processo Adiabático Reversível (Isentrópico)
+        // Dado S1, V2 e mols, encontrar T2 tal que S(T2, P2) == S1
+        // Onde P2 é função de T2 e V2 (P2 = nRT2 / V2)
+        function resolverTAdiabatico(S_alvo, V_alvo, n, coeffs, T_inicial) {
+            let T = T_inicial;
+            for(let i=0; i<20; i++) { // Newton-Raphson simplificado
+                let P = (n * R * T) / V_alvo;
+                let S_atual = entropiaTotal(T, P, coeffs);
+                let diff = S_atual - S_alvo;
+                
+                if(Math.abs(diff) < 0.01) break;
+
+                // Ajuste: dT ~ diff / (Cp/T) -> aprox grosseira para convergência
+                let cp = calcShomate(T, coeffs).cp;
+                T = T - (diff * T / cp); 
+            }
+            return T;
+        }
+
+        // --- FUNÇÃO PRINCIPAL DE SIMULAÇÃO ---
+
+        function calcular() {
+            const gasKey = document.getElementById('gasSelect').value;
+            const modoPreciso = document.getElementById('checkLaine').checked;
+            const processo = document.getElementById('processo').value;
+            
+            const T1 = parseFloat(document.getElementById('t1').value);
+            const P1 = parseFloat(document.getElementById('p1').value);
+            const V1 = parseFloat(document.getElementById('v1').value);
+            let V2 = parseFloat(document.getElementById('v2').value);
+
+            const gas = gases[gasKey];
+            
+            // Calcular mols baseado no estado 1 (Lei dos Gases Ideais é usada para Estado, Polinômios para Energia)
+            // PV = nRT -> n = PV/RT
+            const n = (P1 * V1) / (R * T1);
+
+            // Dados para plotagem
+            let xData = [], yData = [];
+            let steps = 50;
+            let W_total = 0;
+            let Q_total = 0;
+            let U_total = 0;
+            
+            // Variaveis finais
+            let T2 = T1, P2 = P1;
+
+            // Configurar estado inicial
+            let props1 = calcShomate(T1, gas.coeffs);
+            let S1 = entropiaTotal(T1, P1, gas.coeffs);
+
+            // --- LOOP DE GERAÇÃO DE CAMINHO ---
+            let deltaV = (V2 - V1) / steps;
+            
+            // Para isocórico, deltaV é 0, tratamos separado
+            if (processo === 'isocorico') {
+                // V constante, P muda com T (vamos assumir aquecimento arbitrário se user não mudou inputs?)
+                // Para o simulador funcionar, em Isocórico, vamos assumir que T2 muda para dobrar P ou algo assim
+                // Mas o ideal é o usuário fornecer T2 ou P2. 
+                // Simplificação: Vamos manter V1=V2. W=0. Q = DeltaU.
+                // Vamos simular um aquecimento de 100K só para mostrar gráfico subindo
+                steps = 2; 
+                V2 = V1; // Força V2=V1
+                let T_final_iso = T1 + 100; // Exemplo arbitrário para visualização
+                xData = [V1, V1];
+                yData = [P1, (n*R*T_final_iso)/V1];
+                
+                let props2 = calcShomate(T_final_iso, gas.coeffs);
+                
+                if (modoPreciso) {
+                    let delta_u_molar = props2.u - props1.u;
+                    U_total = delta_u_molar * n;
+                } else {
+                    // Cv constante (aprox 5/2 R para diatômico)
+                    let cv = 2.5 * R; 
+                    U_total = n * cv * (T_final_iso - T1);
+                }
+                W_total = 0;
+                Q_total = U_total;
+                T2 = T_final_iso;
+
+            } else {
+                // Processos com variação de volume
+                let T_prev = T1;
+                let P_prev = P1;
+
+                for (let i = 0; i <= steps; i++) {
+                    let V_curr = V1 + i * deltaV;
+                    let P_curr = 0;
+                    let T_curr = T1;
+
+                    if (processo === 'isobarico') {
+                        P_curr = P1;
+                        // V = nRT/P -> T = PV/nR
+                        T_curr = (P_curr * V_curr) / (n * R);
+                    }
+                    else if (processo === 'isotermico') {
+                        T_curr = T1;
+                        P_curr = (n * R * T1) / V_curr;
+                    }
+                    else if (processo === 'adiabatico') {
+                        if (modoPreciso) {
+                            // NIST: Manter S constante
+                            T_curr = resolverTAdiabatico(S1, V_curr, n, gas.coeffs, T_prev);
+                        } else {
+                            // Clássico: PV^gamma = cte
+                            // gamma aprox 1.4
+                            let gamma = 1.4; 
+                            if (gasKey === 'ar' || gasKey === 'n2') gamma = 1.4;
+                            if (gasKey === 'co2') gamma = 1.3;
+                            
+                            // T2 = T1 * (V1/V2)^(g-1)
+                            T_curr = T1 * Math.pow((V1/V_curr), gamma - 1);
+                        }
+                        P_curr = (n * R * T_curr) / V_curr;
+                    }
+
+                    xData.push(V_curr);
+                    yData.push(P_curr);
+                    T_prev = T_curr; // Para ajudar o chute inicial do proximo passo adiabático
+                    
+                    if (i === steps) {
+                        T2 = T_curr;
+                        P2 = P_curr;
+                    }
+                }
+                
+                // CÁLCULO DE INTEGRAIS (AREA) E ENERGIAS
+                if (processo === 'isobarico') {
+                    W_total = P1 * (V2 - V1); // Exato
+                    // Q = Delta H
+                    let props2 = calcShomate(T2, gas.coeffs);
+                    if (modoPreciso) {
+                        let delta_h = (props2.h - props1.h) * n; // J
+                        Q_total = delta_h;
+                        U_total = (props2.u - props1.u) * n;
+                    } else {
+                        let cp_const = 3.5 * R; // Diatômico aprox
+                        Q_total = n * cp_const * (T2 - T1);
+                        U_total = Q_total - W_total;
+                    }
+                }
+                else if (processo === 'isotermico') {
+                    W_total = n * R * T1 * Math.log(V2/V1);
+                    U_total = 0; // Gás ideal U depende so de T (Mesmo no NIST U varia pouco com P)
+                    // Nota: No Shomate U só depende de T. Se T é cte, Delta U = 0.
+                    Q_total = W_total;
+                }
+                else if (processo === 'adiabatico') {
+                    // Q = 0
+                    Q_total = 0;
+                    // W = - Delta U
+                    let props2 = calcShomate(T2, gas.coeffs);
+                    if (modoPreciso) {
+                        let delta_u = (props2.u - props1.u) * n;
+                        U_total = delta_u;
+                        W_total = -delta_u;
+                    } else {
+                        // W = (P2V2 - P1V1) / (1-gamma)
+                        let gamma = 1.4; // simplificado
+                        W_total = (P2*V2 - P1*V1) / (1 - gamma);
+                        U_total = -W_total;
+                    }
+                }
+            }
+
+            atualizarGrafico(xData, yData, processo, modoPreciso);
+            atualizarResultados(W_total, Q_total, U_total, T2);
+            atualizarPistao(V1, V2, T1, T2);
+        }
+
+        function atualizarGrafico(x, y, tipo, preciso) {
+            let trace = {
+                x: x, y: y, mode: 'lines', fill: 'tozeroy',
+                line: { color: '#3498db', width: 3 },
+                name: 'Processo'
+            };
+            
+            let layout = {
+                title: `Diagrama PV (${tipo.toUpperCase()}) - ${preciso ? "Preciso (NIST)" : "Ideal Simplificado"}`,
+                xaxis: { title: 'Volume (m³)' },
+                yaxis: { title: 'Pressão (Pa)' },
+                margin: { t: 40, l: 60, r: 20, b: 40 }
+            };
+            
+            Plotly.newPlot('plotDiv', [trace], layout);
+        }
+
+        function atualizarResultados(W, Q, U, T2) {
+            document.getElementById('resW').innerText = W.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + " J";
+            document.getElementById('resQ').innerText = Q.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + " J";
+            document.getElementById('resU').innerText = U.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + " J";
+            document.getElementById('resT2').innerText = "Temp. Final: " + T2.toFixed(1) + " K";
+        }
+
+        function atualizarPistao(V1, V2, T1, T2) {
+            // Normalização para animação visual (altura max do cilindro é 200px)
+            const maxV = Math.max(V1, V2) * 1.2;
+            const hStart = (V1 / maxV) * 100; // %
+            const hEnd = (V2 / maxV) * 100;
+            
+            const pistHead = document.getElementById('pistHead');
+            const pistGas = document.getElementById('pistGas');
+
+            // Calcular cor baseada na temperatura (Azul 300K -> Vermelho 1000K)
+            function getTempColor(T) {
+                // Simples interpolação
+                let tNorm = Math.min(Math.max((T - 300) / 700, 0), 1);
+                let r = Math.floor(52 + (231 - 52) * tNorm);
+                let g = Math.floor(152 + (76 - 152) * tNorm);
+                let b = Math.floor(219 + (60 - 219) * tNorm);
+                return `rgba(${r},${g},${b}, 0.6)`;
+            }
+
+            // Resetar animação
+            pistGas.style.height = hStart + "%";
+            pistHead.style.bottom = hStart + "%";
+            pistGas.style.backgroundColor = getTempColor(T1);
+
+            // Trigger animação após pequeno delay
+            setTimeout(() => {
+                pistGas.style.height = hEnd + "%";
+                pistHead.style.bottom = hEnd + "%";
+                pistGas.style.backgroundColor = getTempColor(T2);
+            }, 100);
+        }
+
+        // Inicia
+        calcular();
+
+    </script>
+</body>
+</html>
