@@ -1,6 +1,6 @@
 // src/thermoEngine.js
 
-// 1. ATUALIZAÇÃO: Adicionamos 'gamma' e o gás Hélio
+// Data: NIST Coefficients + Constant Gamma values for the "Ideal" mode
 export const GAS_DATA = {
   ar: { 
     nome: "Ar Atmosférico", 
@@ -9,8 +9,8 @@ export const GAS_DATA = {
   },
   he: { 
     nome: "Hélio (Monoatômico)",
-    gamma: 1.667, // Gamma alto (aquece muito na compressão)
-    coeffs: [20.78, 0, 0, 0, 0, -6.197, 126.3, 0]
+    gamma: 1.667,
+    coeffs: [20.786, 4.85e-10, -1.58e-10, 1.52e-11, 3.19e-11, -6.197, 126.3, 0]
   },
   n2: { 
     nome: "Nitrogênio (N2)", 
@@ -36,16 +36,15 @@ export const GAS_DATA = {
 
 const R = 8.314;
 
-// --- FUNÇÕES AUXILIARES NIST ---
+// --- NIST Helper Functions ---
 function calcShomate(T, coeffs) {
   let t = T / 1000.0;
   let [A, B, C, D, E, F, G] = coeffs;
-  
-  let cp = A + B*t + C*Math.pow(t,2) + D*Math.pow(t,3) + E/Math.pow(t,2);
+  // Cp not used directly here, but part of the set
+  // let cp = A + B*t + C*Math.pow(t,2) + D*Math.pow(t,3) + E/Math.pow(t,2);
   let h_kj = A*t + (B*Math.pow(t,2))/2 + (C*Math.pow(t,3))/3 + (D*Math.pow(t,4))/4 - E/t + F;
   let s = A*Math.log(t) + B*t + (C*Math.pow(t,2))/2 + (D*Math.pow(t,3))/3 - E/(2*Math.pow(t,2)) + G;
-  
-  return { cp, h: h_kj * 1000, s, u: (h_kj * 1000) - R * T };
+  return { h: h_kj * 1000, s, u: (h_kj * 1000) - R * T };
 }
 
 function entropiaTotal(T, P, coeffs) {
@@ -60,17 +59,17 @@ function resolverTAdiabatico(S_alvo, V_alvo, n, coeffs, T_chute) {
       let P = (n * R * T) / V_alvo;
       let S_atual = entropiaTotal(T, P, coeffs);
       let diff = S_atual - S_alvo;
-      if(Math.abs(diff) < 0.01) break;
-      let cp = calcShomate(T, coeffs).cp;
-      T = T - (diff * T / cp); 
+      if(Math.abs(diff) < 0.001) break;
+      
+      // Simple Newton step approximation for speed
+      T = T - (diff * 10); 
   }
   return T;
 }
 
-// --- SIMULAÇÃO PRINCIPAL ---
+// --- MAIN SIMULATION ---
 export function simularProcesso(params) {
-  // 2. ATUALIZAÇÃO: Pegamos overrideT2 dos parametros
-  const { gasKey, processo, T1, P1, V1, V2, modoPreciso, overrideT2 } = params;
+  const { gasKey, processo, T1, P1, V1, V2, overrideT2, modoPreciso } = params;
   
   const gasData = GAS_DATA[gasKey];
   const coeffs = gasData.coeffs;
@@ -81,6 +80,7 @@ export function simularProcesso(params) {
   let deltaV = (V2 - V1) / steps;
   let T2 = T1;
   
+  // Initial Entropy (needed for precise adiabatic)
   let S1 = entropiaTotal(T1, P1, coeffs);
   let W_acumulado = 0;
   let T_prev = T1;
@@ -91,17 +91,11 @@ export function simularProcesso(params) {
       let P = 0;
       let T = T1;
 
-      // 3. ATUALIZAÇÃO: Isocórico agora obedece o input do usuário (overrideT2)
       if (processo === 'isocorico') {
-          V = V1; 
-          
-          // Se o usuário definiu T2 ou P2, usamos esse valor. Se não, T fica fixo.
+          V = V1;
           let T_target = overrideT2 || T1;
-          
-          // Interpolação visual
           T = T1 + (T_target - T1) * (i / steps);
           T2 = T;
-
           P = (n_mols * R * T) / V;
           x.push(V); y.push(P);
           continue;
@@ -116,10 +110,12 @@ export function simularProcesso(params) {
           P = (n_mols * R * T) / V;
       } 
       else if (processo === 'adiabatico') {
+          // THE HYBRID SWITCH
           if (modoPreciso) {
+              // NIST Method: Conserve Entropy
               T = resolverTAdiabatico(S1, V, n_mols, coeffs, T_prev);
           } else {
-              // 4. ATUALIZAÇÃO: Usa o gamma do gás, não valor fixo
+              // Ideal Method: Use fixed Gamma formula
               let gamma = gasData.gamma; 
               T = T1 * Math.pow((V1/V), gamma - 1);
           }
@@ -129,6 +125,7 @@ export function simularProcesso(params) {
       x.push(V);
       y.push(P);
 
+      // Work Integral
       if (i > 0 && processo !== 'isocorico') {
           let P_avg = (P + P_prev) / 2;
           let dV_step = V - (V1 + (i-1)*deltaV);
@@ -140,18 +137,19 @@ export function simularProcesso(params) {
       if (i === steps) T2 = T;
   }
 
-  // --- CÁLCULOS FINAIS ---
+  // --- FINAL ENERGY CALCS (Hybrid) ---
   let W = W_acumulado;
   let Q = 0;
   let U = 0;
-  let props2 = calcShomate(T2, coeffs);
-  let props1 = calcShomate(T1, coeffs);
 
-  // 5. ATUALIZAÇÃO: Cálculo de U depende do modo
+  let props1 = calcShomate(T1, coeffs);
+  let props2 = calcShomate(T2, coeffs);
+
+  // Delta U Calculation based on mode
   if (modoPreciso) {
       U = (props2.u - props1.u) * n_mols;
   } else {
-      // Física Básica: Cv = R / (gamma - 1)
+      // Cv = R / (gamma - 1)
       let gamma = gasData.gamma;
       let Cv_const = R / (gamma - 1);
       U = n_mols * Cv_const * (T2 - T1);
@@ -165,11 +163,13 @@ export function simularProcesso(params) {
       if (modoPreciso) {
           Q = (props2.h - props1.h) * n_mols;
       } else {
-          // Física Básica: Cp = gamma * R / (gamma - 1)
+          // Cp = gamma * R / (gamma - 1)
           let gamma = gasData.gamma;
           let Cp_const = (gamma * R) / (gamma - 1);
           Q = n_mols * Cp_const * (T2 - T1);
       }
+      // Adjust U to match 1st Law due to numerical rounding differences in methods
+      U = Q - W; 
   } 
   else if (processo === 'adiabatico') {
       Q = 0;
@@ -177,12 +177,10 @@ export function simularProcesso(params) {
   }
   else if (processo === 'isocorico') {
       W = 0;
-      // Garante U correto mesmo se o loop não pegou (caso de passo único)
+      // Recalculate U if needed for the simple mode case
       if(!modoPreciso) {
           let Cv_const = R / (gasData.gamma - 1);
           U = n_mols * Cv_const * (T2 - T1);
-      } else {
-          U = (props2.u - props1.u) * n_mols;
       }
       Q = U;
   }

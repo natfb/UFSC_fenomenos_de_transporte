@@ -16,114 +16,62 @@ const styles = {
 };
 
 export const ControlPanel = ({ params, setParams, gasOptions }) => {
-  
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setParams(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : (type === 'number' ? parseFloat(value) : value)
+    setParams(prev => ({ 
+        ...prev, 
+        [name]: type === 'checkbox' ? checked : (isNaN(value) ? value : parseFloat(value)) 
     }));
   };
-
-  const setMode = (mode) => {
-    setParams(prev => ({ ...prev, targetMode: mode }));
-  };
-
-  // Lógica para decidir quais botões aparecem
-  const showV = params.processo !== 'isocorico';
-  const showP = params.processo !== 'isobarico';
-  const showT = params.processo !== 'isotermico';
+  const setMode = (mode) => setParams(prev => ({ ...prev, targetMode: mode }));
 
   return (
-    <div style={{...styles.card, flex: 1, minWidth: '300px'}}>
-      <h2 style={{marginTop: 0, color: '#333'}}>Configuração</h2>
+    <div style={styles.card}>
+      <h3 style={{margin:'0 0 10px 0', color:'#333'}}>Configuração do Processo</h3>
       
       <label style={styles.label}>Gás</label>
       <select name="gasKey" value={params.gasKey} onChange={handleChange} style={styles.input}>
-        {Object.entries(gasOptions).map(([key, val]) => (
-          <option key={key} value={key}>{val.nome}</option>
-        ))}
+        {Object.entries(gasOptions).map(([key, val]) => <option key={key} value={key}>{val.nome}</option>)}
       </select>
 
-      <label style={styles.label}>Processo</label>
+      <label style={styles.label}>Processo Termodinâmico</label>
       <select name="processo" value={params.processo} onChange={handleChange} style={styles.input}>
-        <option value="isotermico">Isotérmico (T cte)</option>
-        <option value="isobarico">Isobárico (P cte)</option>
-        <option value="adiabatico">Adiabático (Q = 0)</option>
-        <option value="isocorico">Isocórico (V cte)</option>
+        <option value="isotermico">Isotérmico (T constante)</option>
+        <option value="isobarico">Isobárico (P constante)</option>
+        <option value="adiabatico">Adiabático (Isentrópico)</option>
+        <option value="isocorico">Isocórico (V constante)</option>
       </select>
 
-      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-          <div>
-              <label style={styles.label}>T1 (K)</label>
-              <input type="number" name="T1" value={params.T1} onChange={handleChange} style={styles.input}/>
-          </div>
-          <div>
-              <label style={styles.label}>P1 (Pa)</label>
-              <input type="number" name="P1" value={params.P1} onChange={handleChange} style={styles.input}/>
-          </div>
-          <div>
-              <label style={styles.label}>V1 (m³)</label>
-              <input type="number" name="V1" value={params.V1} step="0.01" onChange={handleChange} style={styles.input}/>
-          </div>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginTop:'10px'}}>
+        <div><label style={styles.label}>P1 (Pa)</label><input type="number" name="P1" value={params.P1} onChange={handleChange} style={styles.input}/></div>
+        <div><label style={styles.label}>V1 (m³)</label><input type="number" name="V1" value={params.V1} step="0.01" onChange={handleChange} style={styles.input}/></div>
+        <div><label style={styles.label}>T1 (K)</label><input type="number" name="T1" value={params.T1} onChange={handleChange} style={styles.input}/></div>
       </div>
 
-      <hr style={{margin: '15px 0', border: 'none', borderTop: '1px solid #eee'}}/>
-
-      <label style={styles.label}>Controlar fim do processo por:</label>
+      <hr style={{margin:'15px 0', borderTop:'1px solid #eee'}}/>
+      
+      <label style={styles.label}>Definir Estado Final (2) por:</label>
       <div style={styles.btnGroup}>
-        {showV && (
-            <button 
-                onClick={() => setMode('V2')}
-                style={{...styles.toggleBtn, backgroundColor: params.targetMode === 'V2' ? '#3498db' : '#f9f9f9', color: params.targetMode === 'V2' ? 'white' : 'black'}}
-            >
-                Volume Final
-            </button>
-        )}
-        {showP && (
-            <button 
-                onClick={() => setMode('P2')}
-                style={{...styles.toggleBtn, backgroundColor: params.targetMode === 'P2' ? '#3498db' : '#f9f9f9', color: params.targetMode === 'P2' ? 'white' : 'black'}}
-            >
-                Pressão Final
-            </button>
-        )}
-        {showT && (
-            <button 
-                onClick={() => setMode('T2')}
-                style={{...styles.toggleBtn, backgroundColor: params.targetMode === 'T2' ? '#3498db' : '#f9f9f9', color: params.targetMode === 'T2' ? 'white' : 'black'}}
-            >
-                Temp. Final
-            </button>
-        )}
+        <button onClick={()=>setMode('V2')} style={{...styles.toggleBtn, background: params.targetMode==='V2'?'#3498db':'#f9f9f9', color:params.targetMode==='V2'?'#fff':'#333'}}>Volume</button>
+        <button onClick={()=>setMode('P2')} style={{...styles.toggleBtn, background: params.targetMode==='P2'?'#3498db':'#f9f9f9', color:params.targetMode==='P2'?'#fff':'#333'}}>Pressão</button>
+        <button onClick={()=>setMode('T2')} style={{...styles.toggleBtn, background: params.targetMode==='T2'?'#3498db':'#f9f9f9', color:params.targetMode==='T2'?'#fff':'#333'}}>Temp.</button>
       </div>
 
-      {/* Input Dinâmico */}
-      <div style={{padding: '10px', background: '#f0f8ff', borderRadius: '5px', border: '1px solid #d6e9f8'}}>
-          {params.targetMode === 'V2' && (
-              <>
-                <label style={{...styles.label, marginTop:0}}>Volume Final (V2) [m³]</label>
-                <input type="number" name="V2" value={params.V2} step="0.01" onChange={handleChange} style={styles.input}/>
-              </>
-          )}
-          {params.targetMode === 'P2' && (
-              <>
-                <label style={{...styles.label, marginTop:0}}>Pressão Final (P2) [Pa]</label>
-                <input type="number" name="P2_target" value={params.P2_target || ''} step="1000" placeholder={params.P1} onChange={handleChange} style={styles.input}/>
-              </>
-          )}
-          {params.targetMode === 'T2' && (
-              <>
-                <label style={{...styles.label, marginTop:0}}>Temperatura Final (T2) [K]</label>
-                <input type="number" name="T2_target" value={params.T2_target || ''} step="10" placeholder={params.T1} onChange={handleChange} style={styles.input}/>
-              </>
-          )}
+      <div style={{marginTop:'10px', padding:'8px', background:'#f0f8ff', borderRadius:'4px'}}>
+         {params.targetMode === 'V2' && <input type="number" name="V2" value={params.V2} onChange={handleChange} style={styles.input} placeholder="Volume Final" />}
+         {params.targetMode === 'P2' && <input type="number" name="P2_target" value={params.P2_target} onChange={handleChange} style={styles.input} placeholder="Pressão Final" />}
+         {params.targetMode === 'T2' && <input type="number" name="T2_target" value={params.T2_target} onChange={handleChange} style={styles.input} placeholder="Temp. Final" />}
       </div>
 
-      <div style={{marginTop: '15px', padding: '10px', background: '#eef', borderRadius: '5px', display: 'flex', alignItems: 'center'}}>
-        <input type="checkbox" name="modoPreciso" checked={params.modoPreciso} onChange={handleChange} style={{width: '20px', height: '20px', marginRight: '10px'}}/>
-        <label style={{margin: 0, fontSize: '0.9rem'}}>Modo NIST (Cp Variável)</label>
-      </div>
+      {/* THE MODE TOGGLE CHECKBOX */}
+      <label style={styles.modeSwitch}>
+        <input type="checkbox" name="modoPreciso" checked={params.modoPreciso} onChange={handleChange} style={{width:'20px', height:'20px', marginRight:'10px'}}/>
+        <div>
+            <span style={{fontWeight:'bold', display:'block'}}>Modo Preciso (NIST)</span>
+            <span style={{fontSize:'0.8em', color:'#666'}}>Usa Cp variável. Desmarque para Gás Ideal simples (Gamma fixo).</span>
+        </div>
+      </label>
+
     </div>
   );
 };

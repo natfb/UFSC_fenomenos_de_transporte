@@ -1,5 +1,12 @@
-npm install
+# Link da aplicacao:
+<https://natfb.github.io/UFSC_fenomenos_de_transporte/>
 
-npm run dev
+# Para rodar localmente:
+Após clonar o repositorio: 
 
-https://natfb.github.io/UFSC_fenomenos_de_transporte/
+``npm install``
+
+``npm run dev``
+
+
+
