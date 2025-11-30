@@ -4,7 +4,7 @@ const styles = {
   gaugeBox: { position: 'relative', width: '120px', height: '80px', display: 'flex', flexDirection: 'column', alignItems: 'center' }
 };
 
-// --- ANALOG GAUGE ---
+// --- MANÔMETRO / TERMÔMETRO ---
 export const AnalogGauge = ({ value, min, max, label, unit, color }) => {
   const pct = (value - min) / (max - min);
   const clamped = Math.min(Math.max(pct, 0), 1);
@@ -29,32 +29,79 @@ export const AnalogGauge = ({ value, min, max, label, unit, color }) => {
   );
 };
 
-// --- REALISTIC PISTON ---
+// --- PISTÃO REALISTA (Correção: Sem transição CSS para movimento fluido via JS) ---
 export const RealPiston = ({ V, T, maxV }) => {
-  const maxH = 180; 
-  const currentH = (V / maxV) * maxH;
-  const pistonY = 200 - currentH;
+  const svgWidth = 120;
+  const svgHeight = 240;
+  const cylinderWallThickness = 4;
+  const cylinderX = 10;
+  const cylinderY = 10;
+  const cylinderWidth = 100;
+  const cylinderHeight = 200;
+  const pistonHeadHeight = 12;
+  
+  const maxGasPixels = cylinderHeight - pistonHeadHeight;
+  
+  // Garante que o pistão nunca saia do cilindro visualmente
+  const safeV = Math.min(Math.max(V, 0), maxV); 
+  const currentGasHeight = (Math.max(safeV, 0.001) / maxV) * maxGasPixels;
 
-  const tRatio = Math.min(Math.max((T - 300) / 700, 0), 1);
-  const r = Math.floor(52 + (255-52)*tRatio);
-  const b = Math.floor(219 + (0-219)*tRatio);
-  const gasColor = `rgba(${r}, 100, ${b}, 0.6)`;
+  const cylinderBaseY = cylinderY + cylinderHeight;
+  const gasTopY = cylinderBaseY - currentGasHeight;
+  const pistonHeadTopY = gasTopY - pistonHeadHeight;
+
+  // Cor Dinâmica
+  let tNorm = Math.min(Math.max((T - 200) / 600, 0), 1);
+  const r = Math.floor(50 + (255 - 50) * tNorm);
+  const g = Math.floor(100 * (1 - Math.abs(tNorm - 0.5) * 2));
+  const b = Math.floor(255 - (255 - 50) * tNorm);
+  const gasColor = `rgba(${r}, ${g}, ${b}, 0.7)`;
+
+  let icon = '🌡️';
+  if (tNorm < 0.2) icon = '❄️';
+  else if (tNorm > 0.8) icon = '🔥';
 
   return (
-    <div style={{position:'relative', width:'120px', height:'220px', borderBottom:'4px solid #333'}}>
-      <svg width="120" height="220" viewBox="0 0 120 220">
-        <rect x="10" y="10" width="100" height="200" fill="none" stroke="#333" strokeWidth="4" />
-        <rect x="12" y={pistonY} width="96" height={currentH} fill={gasColor} style={{transition:'all 0.1s linear'}} />
-        <rect x="12" y={pistonY - 10} width="96" height={10} fill="#555" stroke="#222" style={{transition:'all 0.1s linear'}} />
-        <rect x="55" y="0" width="10" height={pistonY - 10} fill="#999" style={{transition:'all 0.1s linear'}} />
-        <line x1="110" y1="200" x2="115" y2="200" stroke="black" />
-        <line x1="110" y1="20" x2="115" y2="20" stroke="black" />
+    <div style={{position:'relative', width:`${svgWidth}px`, height:`${svgHeight}px`}}>
+      <svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`}>
+        
+        {/* Gás (Sem transition para não atrasar a animação) */}
+        <rect 
+            x={cylinderX + cylinderWallThickness/2} 
+            y={gasTopY} 
+            width={cylinderWidth - cylinderWallThickness} 
+            height={currentGasHeight} 
+            fill={gasColor} 
+        />
+
+        {/* Paredes */}
+        <rect 
+            x={cylinderX} y={cylinderY} width={cylinderWidth} height={cylinderHeight} 
+            fill="none" stroke="#333" strokeWidth={cylinderWallThickness} 
+        />
+        <line x1={cylinderX} y1={cylinderBaseY} x2={cylinderX+cylinderWidth} y2={cylinderBaseY} stroke="#333" strokeWidth={cylinderWallThickness}/>
+
+        {/* Cabeça do Pistão */}
+        <rect 
+            x={cylinderX + cylinderWallThickness/2 + 1} 
+            y={pistonHeadTopY} 
+            width={cylinderWidth - cylinderWallThickness - 2} 
+            height={pistonHeadHeight} 
+            fill="#555" stroke="#222" 
+        />
+        
+        {/* Haste */}
+        <rect 
+            x={svgWidth/2 - 5} y={0} width={10} height={pistonHeadTopY} 
+            fill="#999" 
+        />
       </svg>
+      
       <div style={{
-          position:'absolute', bottom:'-30px', left:'0', width:'100%', textAlign:'center',
-          fontSize:'24px', opacity: tRatio > 0.1 ? 1 : 0.3
+          position:'absolute', bottom:'5px', left:'0', width:'100%', textAlign:'center',
+          fontSize:'28px', transition: 'all 0.3s ease'
       }}>
-        {tRatio > 0.5 ? '🔥' : (tRatio < 0.1 ? '❄️' : '💨')}
+        {icon}
       </div>
     </div>
   );

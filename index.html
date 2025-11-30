@@ -5,6 +5,36 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>my-app</title>
+<script type="module">
+      (async function() {
+        try {
+          // O TRUQUE: Definir o caminho numa variável impede o Vite de tentar
+          // "bundlar" o arquivo. O navegador vai carregar nativamente.
+          const path = window.location.origin + '/UFSC_fenomenos_de_transporte/coolprop.js'; 
+          
+          // Importa o módulo dinamicamente
+          const moduleExport = await import(/* @vite-ignore */ path);
+          
+          // Pega a função construtora (padrão do Emscripten)
+          const loadCoolProp = moduleExport.default || moduleExport;
+
+          // Inicializa o WASM
+          const instance = await loadCoolProp({
+            locateFile: (path) => {
+              // Garante que o WASM também seja pego da raiz
+              return window.location.origin + '/UFSC_fenomenos_de_transporte/' + path;
+            }
+          });
+
+          // Salva no escopo global
+          window.Module = instance;
+          console.log("✅ CoolProp WASM Carregado e Pronto!");
+          
+        } catch (err) {
+          console.error("❌ Falha ao carregar CoolProp:", err);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
