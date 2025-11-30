@@ -156,7 +156,7 @@ export const ResultsBoard = ({ results }) => (
     <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'5px', fontSize:'0.85rem'}}>
         <div>P2: <span style={{color:'#f1c40f'}}>{(results.P2/1000).toFixed(1)} kPa</span></div>
         <div>T2: <span style={{color:'#f1c40f'}}>{results.T2.toFixed(1)} K</span></div>
-        <div style={{gridColumn:'span 2'}}>V2: <span style={{color:'#f1c40f'}}>{results.V2.toFixed(4)} m³</span></div>
+        <div style={{gridColumn:'span 2'}}>V2: <span style={{color:'#f1c40f'}}>{results.V2} m³</span></div>
     </div>
   </div>
 );
